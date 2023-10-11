@@ -16,10 +16,13 @@ section .data
 
 	flagsEx:	db 09h, '<-h> : display help', 0Ah, 09h, '<-v> : set verbose mode', 0Ah, 0
 
-	errorPrefix:	db 'error: ',
-	statusPrefix:	db 'view: ',
+	errorPre:	db 'error: ', 0
+	statusPre:	db 'view: ', 0
 
 	errorMes1	db 'file could not be open', 0Ah, 0
+	errorMes2	db 'unknown argument', 0Ah, 0
+
+	debug:		db 'debug, yayyy!', 0Ah, 0
 
 section .text
 global _start
@@ -29,18 +32,38 @@ global _start
 ;=================================================
 
 _start:
-	pop	rbx
-	cmp	rbx, 2
-	jl	noArgs
-	call 	exitSuccess
+	pop	rbx		; pop argc
+	cmp	rbx, 2		; is there more than 2?
+	jl	noArgs		; call use if no args
+	add	rsp, 8		; skip over argv[0]
+	pop	rsp		; argv[1]
+	cmp	[rsp], byte 45	; does it begin with "-"?
+	je	argsParse	; if so, let's parse it
+	call	fileSetup	; else, it must be a filename
+
+argsParse:
+	inc	rsp
+	cmp	[rsp], byte 104	; h? (help)
+	je	noArgs
+	cmp	[rsp], byte 72	; uppercase h?
+	je	noArgs
+	cmp	[rsp], byte 118	; v? (version)
+	je	ver
+	cmp	[rsp], byte 86	; uppercase v?
+	je	ver
+	mov	rsi, errorPre
+	call	write
+	mov	rsi, errorMes2	; unknown argument then
+	call	write
+	call	use
+
+fileSetup:
+	mov	rsi, debug
+	call	write
+	call	exitSuccess
 
 noArgs:
 	call	use
-	call	exitFailure
-
-;=================================================
-; subroutines specificaly for this program
-;=================================================
 
 ; displays the usage of the program on request or on error
 use:
@@ -50,12 +73,19 @@ use:
 	call	write
 	mov	rsi, flagsEx
 	call	write
-        ret
+        call	exitFailure
+
+; displays name, version, and a small description on request
+ver:
+	mov	rsi, fileName
+	call	write
+	call	exitSuccess
 
 ;=================================================
-; basic subroutines and shorthands
+; subroutines and shorthands
 ;=================================================
 
+; exit subroutines. self-explanatory
 exitSuccess:
 	mov	rax, 60
 	mov	rdi, 0		; exit code
