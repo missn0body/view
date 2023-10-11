@@ -1,5 +1,5 @@
 ASM = nasm
-ASMFLAGS = -f elf64 -Ox -Ov
+ASMFLAGS = -f elf64 -Ox -Ov -g
 LD = ld
 RM = rm
 
