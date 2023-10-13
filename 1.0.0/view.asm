@@ -1,5 +1,5 @@
-	bits 64
-	cpu x64
+        bits 64
+        cpu x64
 
 ;=================================================
 ; File VIEWer, similar to 'cat'
@@ -8,121 +8,129 @@
 
 section .data
 
-	fileName:	db 'Terminal File VIEWer '
-	version: 	db '(v. 1.0.0): '
-	signature:	db 'a barebones assembly schtick by anson.', 0Ah, 0
+        fileName:       db 'Terminal File VIEWer '
+        version:        db '(v. 1.0.0): '
+        signature:      db 'a barebones assembly schtick by anson.', 0Ah, 0
+        usage:          db 'Usage: view <file> <-h> <-v>', 0Ah, 0
+        flagsEx:        db 09h, '<-h> : display help', 0Ah, 09h, '<-v> : set verbose mode', 0Ah, 0
 
-	usage: 		db 'Usage: view <file> <-h> <-v>', 0Ah, 0
+        errorPre:       db 'error: ', 0
+        statusPre:      db 'view: ', 0
 
-	flagsEx:	db 09h, '<-h> : display help', 0Ah, 09h, '<-v> : set verbose mode', 0Ah, 0
+        errorMes1:      db 'unknown argument', 0Ah, 0
+	errorMes2:	db 'not enough arguments', 0Ah, 0
+        errorMes3:      db 'file could not be open', 0Ah, 0
+        errorMes4:      db 'file could not be read', 0Ah, 0
 
-	errorPre:	db 'error: ', 0
-	statusPre:	db 'view: ', 0
+        debug:          db 'debug, yayyy!', 0Ah, 0
+	nl:		db 0Ah, 0
 
-	errorMes1	db 'file could not be open', 0Ah, 0
-	errorMes2	db 'unknown argument', 0Ah, 0
-
-	debug:		db 'debug, yayyy!', 0Ah, 0
+        bufsize		equ 8192
 
 section .text
 global _start
 
-;=================================================
-; _start
-;=================================================
-
 _start:
-	pop	rbx		; pop argc
-	cmp	rbx, 2		; is there more than 2?
-	jl	noArgs		; call use if no args
-	add	rsp, 8		; skip over argv[0]
-	pop	rsp		; argv[1]
-	cmp	[rsp], byte 45	; does it begin with "-"?
-	je	argsParse	; if so, let's parse it
-	call	fileSetup	; else, it must be a filename
-
-argsParse:
-	inc	rsp
-	cmp	[rsp], byte 104	; h? (help)
-	je	noArgs
-	cmp	[rsp], byte 72	; uppercase h?
-	je	noArgs
-	cmp	[rsp], byte 118	; v? (version)
-	je	ver
-	cmp	[rsp], byte 86	; uppercase v?
-	je	ver
-	mov	rsi, errorPre
-	call	write
-	mov	rsi, errorMes2	; unknown argument then
-	call	write
-	call	use
-
-fileSetup:
-	mov	rsi, debug
-	call	write
+	pop	rcx		; get argc off the stack
+	cmp	rcx, 2		; do we have more than 1 arg?
+	jl	noArgs		; if not, display usage and exit
+	add	rsp, 8		; skip argv[0]
+	pop	rsi		; put argv[1] into rsi
+	cmp	[rsi], byte 45	; is the first character a hyphen?
+	je	argsParse
+	call	puts		; what is argv[1] anyways?
+	mov	rsi, nl
+	call	puts
 	call	exitSuccess
 
 noArgs:
-	call	use
+	mov	rsi, errorPre
+	call	puts
+	mov	rsi, errorMes2	; put the address of error message
+	call	puts		; write it to string
+	call	useMes		; and display usage
+	call	exitFailure
 
-; displays the usage of the program on request or on error
-use:
+argsParse:
+	inc	rsi		; move pointer up to argv[1][1]
+	cmp	[rsi], byte 104 ; is it equal to 'h'?
+	je	useMes		; then show usage
+	cmp	[rsi], byte 118 ; is it equal to 'v'?
+	je	verMes		; then show version
+	mov	rsi, errorPre	; unknown argument then
+	call	puts
+	mov	rsi, errorMes1
+	call	puts
+	call	useMes		; make sure user knows how to use program
+
+
+; displays name and usage on exit or request
+useMes:
 	mov	rsi, fileName
-	call	write
+	call	puts
 	mov	rsi, usage
-	call	write
+	call 	puts
 	mov	rsi, flagsEx
-	call	write
-        call	exitFailure
+	call	puts
+	call	exitFailure
 
-; displays name, version, and a small description on request
-ver:
+; displays version on request
+verMes:
 	mov	rsi, fileName
-	call	write
-	call	exitSuccess
+	call	puts
+	call	exitFailure
 
-;=================================================
-; subroutines and shorthands
-;=================================================
-
-; exit subroutines. self-explanatory
-exitSuccess:
-	mov	rax, 60
-	mov	rdi, 0		; exit code
-	syscall
-
-exitFailure:
-        mov     rax, 60
-        mov     rdi, 1          ; exit code
-        syscall
-
-; short hand for printing a string of (rdx) length to stdout
-; rdi = address of string
-write:
-	xor	rax, rax
-	mov	rdi, rsi
+; basic implementation of libc puts()
+; NOTE, requires a null-terminated string
+; rsi = address of null-terminated string
+puts:
+	push	rax
+	push	rdx
+	mov	rax, 1		; we want to write
+	mov	rdi, rsi	; ready address for strlen()
+	xor	rdx, rdx	; make sure our count is zero
 	call	strlen
-	mov	rdx, rax
-	mov	rax, 1
 	mov	rdi, 1
-	syscall
-	ret
+	syscall			; rsi should already have address
+	pop	rdx
+	pop	rax
+        ret
 
-; implementation of libc 'strlen'
+; implementation of libc strlen()
+; rdx = length of string
 ; rdi = address of string
-; rax = length of string
 strlen:
-	push	rcx
-	xor	rcx, rcx
+	push 	rcx		; rcx will be our counter
+	push	rsi		; and our temp buffer for address
+	mov	rsi, rdi
+	xor	rcx, rcx	; make sure that counter is zero
 
 strlen_loop:
-	cmp	[rdi], byte 0
-	jz	strlen_exit
-	inc	rcx
-	inc	rdi
+	cmp	[rsi], byte 0	; is it null?
+	je	strlen_done	; if so, get out of loop
+	inc	rcx		; increment counter
+	inc	rsi		; and pointer
 	jmp	strlen_loop
 
-strlen_exit:
-	mov	rax, rcx
-	pop	rcx
+strlen_done:
+	mov	rdx, rcx
+	pop 	rsi
+	pop 	rcx
 	ret
+
+; exit with return code 0
+exitSuccess:
+	mov	rax, 60
+	mov	rdi, 0
+	syscall
+
+; exit with return code -1
+exitFailure:
+	mov	rax, 60
+	mov	rdi, -1
+	syscall
+
+
+section .bss
+	filename 	resb 512
+	buf 		resb 8192
