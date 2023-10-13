@@ -37,10 +37,44 @@ _start:
 	add	rsp, 8		; skip argv[0]
 	pop	rsi		; put argv[1] into rsi
 	cmp	[rsi], byte 45	; is the first character a hyphen?
-	je	argsParse
-	call	puts		; what is argv[1] anyways?
-	mov	rsi, nl
+	je	argsParse	; parse it then
+	mov	rdi, rsi	; otherwise it must be a filename
+	mov	rsi, 0		; read only mode
+	mov	rdx, 666o	; chmod value, read-only for everyone
+	mov	rax, 2		; rax will hold our file handle
+	syscall
+	test	rax, rax	; is the fd <= 0? anything below is invalid
+	jge	validOpen	; go to label for further processing
+	mov	rsi, errorPre	; otherwise we got an error
 	call	puts
+	mov	rsi, errorMes3
+	call	puts
+	call	exitFailure
+
+validOpen:
+	mov	rdi, rax	; rax holds our file handle
+	mov	rax, 0		; we want to read from file now
+	mov	rsi, buf	; load our big ol buffer
+	mov	rdx, bufsize	; size of our big ol buffer
+	syscall
+	cmp	rax, -1		; did we get an error?
+	jg	validRead	; if not, go to further processing
+	mov	rax, 3
+	syscall			; close file
+	mov	rsi, errorPre
+	call	puts
+	mov	rsi, errorMes4	; display error
+	call	puts
+	call	exitFailure
+
+validRead:
+	mov	rax, 1
+	mov	rdi, 1
+	mov	rsi, buf
+	mov	rdx, bufsize
+	syscall
+	mov	rax, 3
+	syscall			; close file
 	call	exitSuccess
 
 noArgs:
@@ -132,5 +166,4 @@ exitFailure:
 
 
 section .bss
-	filename 	resb 512
 	buf 		resb 8192
