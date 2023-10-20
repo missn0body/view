@@ -19,7 +19,40 @@ _start:
 	mov	byte [bx + 81H], '$'	; set end of args to dollar sign
 	cmp	[81H + 1], byte 45	; is the argv[1][0] a '-'?
 	je	argsParse
+	mov	ah, 3DH			; then argv[1] must be a filename. set mode to open file
+	mov	al, 0			; set to read-only mode
+	lea	dx, [81H + 1]		; args is filename to open
+	int	21H
+	jnc	validOpen		; carry flag is set if there is an error
+	lea	dx, [errorPre]		; there must be an error if we've reached here
+	call	puts
+	lea	dx, [errorMes3]
+	call	puts
 	call	_end
+
+validOpen:
+	mov	bx, ax			; set file handle to read from, the one we just got
+	mov	cx, bufsize		; set number of bytes to read
+	mov	dx, buf			; set block of data to put file in
+	push	ax			; save file handle for later
+	mov	ah, 3FH			; we want to read our file now
+	int	21H
+	jnc	validRead		; carry flag is set if failure on read
+	lea	dx, [errorPre]		; past here, we must have gotten an error
+	call	puts
+	lea	dx, [errorMes4]
+	call	puts
+	call	_end
+
+validRead:
+	xor	bx, bx
+	mov	byte [bx + buf], '$'	; set end of buffer block with dollar sign
+	mov	dx, buf
+	call	puts			; print contents of buffer
+	mov	ah, 3EH			; set mode to close file
+	pop	bx			; recall file handle
+	int	21H
+	call	_end			; done!
 
 noArgs:
 	lea	dx, [errorPre]
@@ -81,3 +114,8 @@ section .data:
         errorMes2:      db 'not enough arguments', ENDL
         errorMes3:      db 'file could not be open', ENDL
         errorMes4:      db 'file could not be read', ENDL
+
+	bufsize		equ 8192
+
+section .bss:
+	buf		resb 8192
