@@ -28,6 +28,10 @@ section .data
         badOpenError:	db 'file could not be open', 0Ah, 0
         badReadError:	db 'file could not be read', 0Ah, 0
 
+	; long argument strings for testing
+	helpString:	db 'help', 0
+	versionString:	db 'version', 0
+
 	; simple debug message
         debug:          db 'debug, yayyy!', 0Ah, 0
         nl:             db 0Ah, 0
@@ -48,11 +52,18 @@ _start:
 
 argsLoop:
 	pop	rdi		; grab the next argv[] on the stack
-	cmp	rdi, byte 0	; does it start with a null character?
+	test	rdi, rdi	; does it start with a null character?
 	je	argsEnd		; if so, exit loop
 	cmp	[rdi], byte 45	; does the character begin with a hyphen?
 	je	argsParse	; go for further processing
-	jmp	argsLoop
+	mov	rsi, rdi	; not an option? must be a filename, save it for later
+	mov	rdi, statusPre
+	call	puts
+	mov	rdi, rsi	; and display it
+	call	puts
+	mov	rdi, nl		; plus newline
+	call	puts
+	jmp	argsLoop	; keep checking for more args
 
 argsParse:
 	inc	rdi		; move the pointer up one
@@ -61,37 +72,76 @@ argsParse:
 	cmp	[rdi], byte 0	; does the argument just end?
 	je	argsLoop	; if so, continue back to loop
 
-	; essentially a debug statement below
-	call	puts
-	mov	rdi, nl
-	call	puts
+	; the character itself is in rdi
+
+	cmp	[rdi], byte 104	; first, test 'h', both lowercase...
+	je	printUsage
+	cmp	[rdi], byte 72	; ... and uppercase
+	je	printUsage
+	cmp	[rdi], byte 118	; do we want to print version info?
+	je	printVersion
+	cmp	[rdi], byte 86	; also uppercase
+	je	printVersion
+	call	unknownArgs
 	jmp	argsLoop
 
 longArgsParse:
 	inc	rdi		; move the pointer up one
 	cmp	[rdi], byte 45	; are there even more hyphens???
 	je	argsLoop	; if so, trash it, go back
+	cmp	[rdi], byte 0	; does the arg consist of just two hyphens?
+	je	argsLoop
 
-	; essentially a debug statement blow
-	call	puts
-	mov	rdi, nl
-	call	puts
+	; the string begins at rdi, and is already null-terminated
+	; at least, it plays nice with this implementation of puts()
+
+	mov	rsi, helpString 	; does the argument equal 'help'?
+	call	strcmp
+	test	rax, rax
+	je	printUsage		; if so, jump to usage
+	mov	rsi, versionString	; does the argument equal 'version'?
+	call	strcmp
+	test	rax, rax
+	je	printVersion		; if so, jump to version
+	call	unknownArgs
 	jmp	argsLoop
 
 argsEnd:
 	call	exitSuccess
+
+printUsage:
+	mov	rdi, fileName
+	call	puts
+	mov	rdi, usage
+	call	puts
+	call	exitSuccess
+
+printVersion:
+	mov	rdi, fileName
+	call	puts
+	call	exitSuccess
+
+; this subprocedure does not exit the program but rather
+; returns back to the calling point
+unknownArgs:
+	mov	rdi, errorPre
+	call	puts
+	mov	rdi, badArgsError
+	call	puts
+	ret
 
 noArgs:
 	mov	rdi, errorPre
 	call	puts
 	mov	rdi, noArgsError
 	call	puts
-	call	exitSuccess
+	call	exitFailure
 
 ; basic implementation of libc puts()
 ; NOTE, requires a null-terminated string
 ; rdi = address of null-terminated string
 puts:
+	push	rsi
 	xor	rax, rax	; make sure register is clear for length
 	call	strlen		; rdi should already contain address
 	mov	rdx, rax	; move the count given into its place
@@ -99,12 +149,14 @@ puts:
 	mov	rax, 1		; we want to write...
 	mov	rdi, 1		; ... to stdout
 	syscall
+	pop	rsi
 	ret
 
 ; implementation of libc strlen()
 ; rdi = address of string
 ; rax = length of string
 strlen:
+	push	rcx
 	lea	rax, [rdi + 1]	; load input, as well as incrementing
 
 strlen_loop:
@@ -113,12 +165,32 @@ strlen_loop:
 	test	cl, cl		; is the current byte null?
 	jnz	strlen_loop	; if not, keep repeating
 	sub	rax, rdi
+	pop	rcx
 	ret
 
 ; implementation of libc strcmp()
 ; NOTE: requires null-terminated strings
 ; rsi = address of string
 ; rdi = address of string
+; rax = the difference of the strings
+strcmp:
+	xor 	rcx, rcx		; ready counter
+
+strcmp_loop:
+	mov 	r10b, [rdi + rcx]	; load each index
+	mov 	r11b, [rsi + rcx]
+	cmp 	r10b, r11b		; how do they compare?
+	jne 	strcmp_end		; if they aren't equal, exit
+	test 	r10b, r10b		; has the first string ended?
+	je 	strcmp_end		; if so, exit
+	inc 	rcx			; increment
+	jmp 	strcmp_loop		; and restart
+
+strcmp_end:
+	sub 	r10b, r11b		; get the difference from indexes
+	movsx 	rax, r10b		; and load to returnValue
+	ret
+
 
 ; exit with return code 0
 exitSuccess:
