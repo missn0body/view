@@ -25,44 +25,47 @@ section .data
 	; error messages down below
         badArgsError:	db 'unknown argument', 0Ah, 0
         noArgsError:	db 'too few arguments, try --help', 0Ah, 0
+	noOptError:	db 'no option argument', 0Ah, 0
+	badOptError:	db 'option argument not a number', 0Ah, 0
+	ignoreError:	db 'non-argument string ignored', 0Ah, 0
         badOpenError:	db 'file could not be open', 0Ah, 0
         badReadError:	db 'file could not be read', 0Ah, 0
 
 	; long argument strings for testing
 	helpString:	db 'help', 0
 	versionString:	db 'version', 0
+	countString:	db 'count', 0
 
-	; simple debug message
-        debug:          db 'debug, yayyy!', 0Ah, 0
+	debug:		db 'debug, yayyy', 0
+
         nl:             db 0Ah, 0
 
-	ansiError:	db 1Bh, '[31m', 0
-	ansiReset:	db 1Bh, '[0m', 0
-
-        bufsize         equ 8192
+        bufsize         equ 256
 
 section .text
 global _start
 
 _start:
+	xor	rbx, rbx	; reset rbx, itll count non-args
 	pop	rcx		; pop off argc
 	cmp	rcx, 2		; is it less than 2?
 	jl	noArgs		; if so, no arguments, print error
 	add	rsp, 8		; align stack and skip argv[0]
 
+;=================================================
+; ARGUMENT PARSING BEGINS HERE
+;=================================================
+
 argsLoop:
 	pop	rdi		; grab the next argv[] on the stack
 	test	rdi, rdi	; does it start with a null character?
-	je	argsEnd		; if so, exit loop
+	je	openFile	; if so, exit loop
 	cmp	[rdi], byte 45	; does the character begin with a hyphen?
 	je	argsParse	; go for further processing
-	mov	rsi, rdi	; not an option? must be a filename, save it for later
-	mov	rdi, statusPre
-	call	puts
-	mov	rdi, rsi	; and display it
-	call	puts
-	mov	rdi, nl		; plus newline
-	call	puts
+	inc	rbx		; increment count, for each non argument string
+	cmp	rbx, 2
+	jge	ignoreNonArgs	; if we've gotten more than two non-args, tell the user
+	mov	[inFile], rdi	; otherwise the first non-arg is a filename, save it
 	jmp	argsLoop	; keep checking for more args
 
 argsParse:
@@ -82,6 +85,13 @@ argsParse:
 	je	printVersion
 	cmp	[rdi], byte 86	; also uppercase
 	je	printVersion
+
+	; the rest of the arguments do not
+	; check for uppercase
+
+	cmp	[rdi], byte 99	; test for 'c'
+	je	countParse	; and jump ahead for further processing
+
 	call	unknownArgs
 	jmp	argsLoop
 
@@ -103,11 +113,22 @@ longArgsParse:
 	call	strcmp
 	test	rax, rax
 	je	printVersion		; if so, jump to version
-	call	unknownArgs
-	jmp	argsLoop
+	mov	rsi, countString	; does the argument equal 'count'?
+	call	strcmp
+	test	rax, rax
+	je	countParse		; if so, jump to further processing
+	call	unknownArgs		; if its not these, we don't know what it is
+	jmp	argsLoop		; see if theres more arguments
 
-argsEnd:
-	call	exitSuccess
+countParse:
+	pop	rdi			; get the next argument, this should be a number
+	test	rdi, rdi		; is the argument non existant?
+	je	noOpt
+	call	atoi			; rdi already holds the option string
+	test	rax, rax
+	js	badOpt			; was the top bit of rax set? must be negative, invalid
+	mov	[count], rax		; save count for later
+	jmp	argsLoop
 
 printUsage:
 	mov	rdi, fileName
@@ -121,7 +142,7 @@ printVersion:
 	call	puts
 	call	exitSuccess
 
-; this subprocedure does not exit the program but rather
+; this subroutine does not exit the program but rather
 ; returns back to the calling point
 unknownArgs:
 	mov	rdi, errorPre
@@ -130,12 +151,83 @@ unknownArgs:
 	call	puts
 	ret
 
+ignoreNonArgs:
+	mov	rdi, statusPre
+	call	puts
+	mov	rdi, ignoreError
+	call	puts
+	jmp	argsLoop
+
 noArgs:
 	mov	rdi, errorPre
 	call	puts
 	mov	rdi, noArgsError
 	call	puts
 	call	exitFailure
+
+noOpt:
+	mov	rdi, errorPre
+	call	puts
+	mov	rdi, noOptError
+	call	puts
+	call	exitFailure
+
+badOpt:
+	mov	rdi, errorPre
+	call	puts
+	mov	rdi, badOptError
+	call	puts
+	call	exitFailure
+
+;=================================================
+; ARGUMENT PARSING ENDS HERE
+;=================================================
+
+openFile:
+	mov	rax, 2		; we want to open
+	mov	rdi, [inFile]
+	mov	rsi, 0		; read-only
+	mov	rdx, 0		; mode does not matter for our purposes
+	syscall
+	test	rax, rax
+	jle	badOpen		; if so, print error and exit
+	mov	rdi, rax	; save file handle
+	mov	rax, 0		; we want to read from file now
+	mov	rsi, buf	; load in our buffer
+	mov	rdx, bufsize
+	syscall
+	cmp	rax, -1		; was there any sort of error?
+	jle	badRead		; if so, error and exit
+	mov	rax, 1		; okay, now lets print
+	mov	rdi, 1		; to stdout
+	mov	rsi, buf	; the contents of our buffer
+	mov	rdx, bufsize	; and the count
+	syscall
+	call	closeFile
+
+closeFile:
+	mov	rax, 4		; we want to close the file
+	mov	rdi, rsi	; file handle should be in rsi
+	syscall
+	call	exitSuccess	; program end!
+
+badOpen:
+	mov	rdi, errorPre
+	call	puts
+	mov	rdi, badOpenError
+	call	puts
+	call	exitFailure
+
+badRead:
+	mov	rdi, errorPre
+	call	puts
+	mov	rdi, badReadError
+	call	puts
+	call	exitFailure
+
+;=================================================
+; HELPER FUNCTIONS BEGIN HERE
+;=================================================
 
 ; basic implementation of libc puts()
 ; NOTE, requires a null-terminated string
@@ -191,6 +283,30 @@ strcmp_end:
 	movsx 	rax, r10b		; and load to returnValue
 	ret
 
+; implementation of libc atoi()
+; NOTE: will not detect negative values
+; rdi = address of string
+; rax = resulting number
+atoi:
+	push	rcx
+	xor 	rax, rax               	; reset returnValue
+
+atoi_loop:
+	movzx 	rcx, byte [rdi]		; loading next index
+	sub 	rcx, '0'		; subtract 48 to convert from ASCII to int
+	jl 	atoi_end		; invalid character?
+	cmp 	rcx, 9			; was it too high?
+	jg 	atoi_end		; if so, return
+
+	lea 	rax, [rax * 4 + rax]  	; rax = result * 5
+	lea 	rax, [rax * 2 + rcx]    ; rax = result * 5 * 2 + digit = result * 10 + digit
+	inc 	rdi                   	; rdi = address of next character
+	jmp 	atoi_loop
+
+atoi_end:
+	pop	rcx
+	ret
+
 
 ; exit with return code 0
 exitSuccess:
@@ -204,5 +320,12 @@ exitFailure:
         mov     rdi, -1
         syscall
 
+
+;=================================================
+; HELPER FUNCTIONS ENDS HERE
+;=================================================
+
 section .bss
-        buf             resb 8192
+	inFile		resb bufsize
+	count		resb bufsize
+        buf             resb bufsize
