@@ -40,7 +40,7 @@ section .data
 
         nl:             db 0Ah, 0
 
-        bufsize         equ 256
+        bufsize         equ 9216
 
 section .text
 global _start
@@ -186,26 +186,45 @@ badOpt:
 openFile:
 	mov	rax, 2		; we want to open
 	mov	rdi, [inFile]
-	mov	rsi, 0		; read-only
-	mov	rdx, 0		; mode does not matter for our purposes
+	xor	rsi, rsi
+	xor	rdx, rdx
 	syscall
-	test	rax, rax
+	test	rax, rax	; did we get a bad handle?
 	jle	badOpen		; if so, print error and exit
 	mov	rdi, rax	; save file handle
-	mov	rax, 0		; we want to read from file now
+	mov	rsi, buf	; load in buffer
+	mov	rbx, [count]	; move count into a register so we can compare
+	test	rbx, rbx	; is there a value in this register?
+	je	noCount		; if so, branch off
+
+yesCount:
+	xor	rax, rax	; we want to read from file now
 	mov	rsi, buf	; load in our buffer
-	mov	rdx, bufsize
+	mov	rdx, rbx
 	syscall
 	cmp	rax, -1		; was there any sort of error?
 	jle	badRead		; if so, error and exit
-	mov	rax, 1		; okay, now lets print
-	mov	rdi, 1		; to stdout
-	mov	rsi, buf	; the contents of our buffer
-	mov	rdx, bufsize	; and the count
+	mov	rax, 1		; okay, now lets print...
+	mov	rdi, 1		; ...to stdout
 	syscall
 	call	closeFile
 
+noCount:
+	xor	rax, rax	; we want to read
+	mov	rsi, buf	; load in buffer
+	mov	rdx, bufsize	; and the set buffer size
+	syscall
+	cmp	rax, -1		; was there any sort of error?
+	jle	badRead		; if so, error and exit
+	mov	rax, 1		; if not, print...
+	mov	rdi, 1		; ...to stdout
+	syscall
+	call	closeFile
+
+
 closeFile:
+	mov	rdi, nl		; print new line
+	call	puts
 	mov	rax, 4		; we want to close the file
 	mov	rdi, rsi	; file handle should be in rsi
 	syscall
