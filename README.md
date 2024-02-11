@@ -6,18 +6,21 @@ Made by anson.
 This is a simple program that writes the
 contents of a given file to 'stdout', similar
 to the program 'cat'. It has an internal
-buffer limited to 8,192 bytes, and any file larger
-than such will not have all of their data read.
+buffer limited to 9,216 bytes, and any file larger
+than such will not have all of their data read. This
+program will not modify files.
 
 Command-line arguments are as follows:
-> view -h (help) -v (version) (filename)
+> view -h (--help) -v (--version) -c (--count) (filename)
 
-In the case of this program, the arguments are
-case-sensitive and as such, arguments such as '-H'
-and '-V' will be read instead unrecognized arguments.
-These arguments can not be globbed together either.
-At the moment, view can not read standard input from
-pipe, and can only read data from existing files.
+As of v.1.0.5, this program supports globbing of
+arguments as well as long options, however there is not
+much reason to actually do so, considering that this
+program will resolve the '--help' and '--version' option
+first, which will stop program flow. In that case, '--help'
+takes precedence over '--version'. At the moment, view can
+not read standard input from pipe, and can only read data
+from existing files.
 
 This program is best used for simple ASCII text files,
 as other file types may prove to have side effects
@@ -36,3 +39,8 @@ so any similarity is entirely coincidental.
 ### v.1.0.0
 Initial version, able to read files into a buffer
 which is then written to screen.
+
+### v.1.0.5
+Added the ability to read long options and to glob
+single-character arguments, as well as the option to
+print a specific amount of bytes to 'stdout'.
