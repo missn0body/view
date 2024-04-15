@@ -16,15 +16,20 @@ section .data
 
 	fileName:       db 'Terminal File VIEWer '
         version:        db '(v. 1.0.5): '
-        signature:      db 'a barebones assembly schtick by anson.', 0Ah, 0
-        usage:          db 'Usage: view (file) -h (--help) -v (--version)', 0Ah, 0
+        signature:      db 'a barebones assembly schtick.', 0Ah
+			db 'created by anson <thesearethethingswesaw@gmail.com>', 0Ah, 0Ah, 0
+        usage:          db 'Usage:', 0Ah, 09h, 'view (-h / --help)', 0Ah
+			db 09h, 'view <filename>', 0Ah
+			db 09h, 'view -c <count> <filename>', 0Ah, 0Ah
+			db 'Options:', 0Ah, 09h, '-c, --count', 09h, 'the amount of characters to display', 0Ah, 0Ah, 0
+	footer:		db 'this product refuses a license, see UNLICENSE for related details', 0Ah, 0
 
         errorPre:       db 'error: ', 0
         statusPre:      db 'view: ', 0
 
 	; error messages down below
         badArgsError:	db 'unknown argument', 0Ah, 0
-        noArgsError:	db 'too few arguments, try --help', 0Ah, 0
+        noArgsError:	db 'too few arguments, try "--help"', 0Ah, 0
 	noOptError:	db 'no option argument', 0Ah, 0
 	badOptError:	db 'option argument not a number', 0Ah, 0
 	ignoreError:	db 'non-argument string ignored', 0Ah, 0
@@ -37,10 +42,9 @@ section .data
 	countString:	db 'count', 0
 
 	debug:		db 'debug, yayyy', 0
+	nl:		db 0Ah, 0
 
-        nl:             db 0Ah, 0
-
-        bufsize         equ 64
+	bufsize         equ 64
 
 section .text
 global _start
@@ -135,6 +139,8 @@ printUsage:
 	call	puts
 	mov	rdi, usage
 	call	puts
+	mov	rdi, footer
+	call	puts
 	call	exitSuccess
 
 printVersion:
@@ -199,6 +205,7 @@ openFile:
 
 yesCount:
 	xor	rax, rax	; we want to read from file now
+	mov	rdi, r10
 	mov	rsi, buf	; load in our buffer
 	mov	rdx, rbx
 	syscall
