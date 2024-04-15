@@ -3,7 +3,7 @@
 
 ;=================================================
 ; File VIEWer, similar to 'cat'
-; Version 1.0.5
+; Version 1.1.0
 ; Made by anson, in Feb 2024
 ;=================================================
 
@@ -15,7 +15,7 @@ section .data
 	; next three strings
 
 	fileName:       db 'Terminal File VIEWer '
-        version:        db '(v. 1.0.5): '
+        version:        db '(v. 1.1.0): '
         signature:      db 'a barebones assembly schtick.', 0Ah
 			db 'created by anson <thesearethethingswesaw@gmail.com>', 0Ah, 0Ah, 0
         usage:          db 'Usage:', 0Ah, 09h, 'view (-h / --help)', 0Ah
@@ -24,7 +24,7 @@ section .data
 			db 'Options:', 0Ah, 09h, '-c, --count', 09h, 'the amount of characters to display', 0Ah, 0Ah, 0
 	footer:		db 'this product refuses a license, see UNLICENSE for related details', 0Ah, 0
 
-        errorPre:       db 'error: ', 0
+        errorPre:       db 'view: ', 0
         statusPre:      db 'view: ', 0
 
 	; error messages down below
@@ -241,7 +241,7 @@ closeFile:
 	mov	rdi, nl		; print new line
 	call	puts
 	mov	rax, 4		; we want to close the file
-	mov	rdi, rsi	; file handle should be in rsi
+	mov	rdi, r10	; file handle is where we saved it
 	syscall
 	call	exitSuccess	; program end!
 
