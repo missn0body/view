@@ -41,10 +41,14 @@ section .data
 	versionString:	db 'version', 0
 	countString:	db 'count', 0
 
-	debug:		db 'debug, yayyy', 0
 	nl:		db 0Ah, 0
+	space:		db 20h, 0
+	zero:		db 30h, 0
 
-	bufsize         equ 64
+	tester:		db 'F', 0
+
+	inbufsize	equ 1
+	bufsize		equ 64
 
 section .text
 global _start
@@ -198,7 +202,7 @@ openFile:
 	test	rax, rax	; did we get a bad handle?
 	jle	badOpen		; if so, print error and exit
 	mov	r10, rax	; save file handle
-	mov	rsi, buf	; load in buffer
+	mov	rsi, readbuf	; load in buffer
 	mov	rbx, [count]	; move count into a register so we can compare
 	test	rbx, rbx	; is there a value in this register?
 	je	noCount		; if so, branch off
@@ -206,7 +210,7 @@ openFile:
 yesCount:
 	xor	rax, rax	; we want to read from file now
 	mov	rdi, r10
-	mov	rsi, buf	; load in our buffer
+	mov	rsi, readbuf	; load in our buffer
 	mov	rdx, rbx
 	syscall
 	cmp	rax, -1		; was there any sort of error?
@@ -219,20 +223,44 @@ yesCount:
 noCount:
 	xor	rax, rax	; we want to read
 	mov	rdi, r10	; load in file handle
-	mov	rsi, buf	; load in buffer
-	mov	rdx, bufsize
+	mov	rsi, readbuf	; load in buffer
+	mov	rdx, inbufsize
 	syscall
 	cmp	rax, -1		; is it a bad read?
 	jle	badRead		; if so, handle it
 	cmp	rax, 0		; did we get nothing?
 	jle	closeFile	; better close down then
 	mov	rdx, rax	; save the amount we got
-	xor	rax, rax
-	inc	rax		; we want to print
-	xor	rdi, rdi
-	inc	rdi		; ... to stdout
-	mov	rsi, buf	; the amount to print is already loaded
+	cmp	[tester], byte 'T'
+	je	hexconv_nocount
+
+regularprint:
+	mov	rax, 1
+	mov	rdi, 1
+	mov	rsi, readbuf
 	syscall
+	jmp	writecheck
+
+hexconv_nocount:
+	inc	r12		; increment counter
+	mov	rax, [readbuf]	; set what we read to convert
+	mov	rdi, itoabuf	; set block to recieve return value
+	call	itoa
+	call	strlen
+	mov	rdx, rax	; save return value into count for write
+	mov	rax, 1
+	mov	rdi, 1
+	mov	rsi, itoabuf	; the amount to print is already loaded
+	syscall
+	mov	rdi, space	; add a space between digits
+	call	puts
+	cmp	r12, 10		; did we already print 10 numbers?
+	jle	writecheck	; if not, continue as normal
+	mov	rdi, nl		; add a newline for easier reading
+	call	puts
+	xor	r12, r12	; reset counter
+
+writecheck:
 	cmp	rax, 0
 	jle	closeFile
 	jmp	noCount
@@ -240,7 +268,7 @@ noCount:
 closeFile:
 	mov	rdi, nl		; print new line
 	call	puts
-	mov	rax, 4		; we want to close the file
+	mov	rax, 3		; we want to close the file
 	mov	rdi, r10	; file handle is where we saved it
 	syscall
 	call	exitSuccess	; program end!
@@ -300,6 +328,8 @@ strlen_loop:
 ; rdi = address of string
 ; rax = the difference of the strings
 strcmp:
+	push	r10
+	push	r11
 	xor 	rcx, rcx		; ready counter
 
 strcmp_loop:
@@ -315,6 +345,8 @@ strcmp_loop:
 strcmp_end:
 	sub 	r10b, r11b		; get the difference from indexes
 	movsx 	rax, r10b		; and load to returnValue
+	pop	r11
+	pop	r10
 	ret
 
 ; implementation of libc atoi()
@@ -341,6 +373,47 @@ atoi_end:
 	pop	rcx
 	ret
 
+; implementation of libc itoa(), but specifically for hexadecimal
+; rax = binary integer
+; rdi = address of string
+itoa:
+	push 	rdx
+	push 	rcx
+	push 	rbx
+	push 	rax
+
+	mov 	rbx, 16		; base of the decimal system
+	xor 	ecx, ecx	; number of digits generated
+
+itoa_nextdiv:
+	xor 	edx, edx	; rax extended to (rdx,rax)
+	div 	rbx		; divide by the number-base
+	push 	rdx		; save remainder on the stack
+	inc 	rcx		; and count this remainder
+	cmp 	rax, 0		; was the quotient zero?
+	jne 	itoa_nextdiv	; no, do another division
+
+itoa_nextdigit:
+	pop 	rax		; else pop recent remainder
+	add 	al, '0'		; and convert to a numeral
+	cmp	al, 57		; are we past the digits?
+	jle	itoa_noadd	; if not, continue
+	add	al, 7		; else, add 7 so we can get letters
+
+itoa_noadd:
+	stosb			; store to memory-buffer
+	loop 	itoa_nextdigit	; again for other remainders
+	xor	al, al
+	mov	al, '.'
+	stosb
+	xor 	al, al
+	stosb			; store the null terminator at the end of the string
+
+	pop 	rax
+	pop 	rbx
+	pop 	rcx
+	pop 	rdx
+	ret
 
 ; exit with return code 0
 exitSuccess:
@@ -362,4 +435,5 @@ exitFailure:
 section .bss
 	inFile		resb bufsize
 	count		resb bufsize
-        buf             resb bufsize
+	itoabuf		resb bufsize
+        readbuf		resb inbufsize
