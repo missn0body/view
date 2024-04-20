@@ -4,7 +4,7 @@
 ;=================================================
 ; File VIEWer, similar to 'cat'
 ; Version 1.1.0
-; Made by anson, in Feb 2024
+; Made by anson, in April 2024
 ;=================================================
 
 section .data
@@ -15,37 +15,36 @@ section .data
 	; next three strings
 
 	fileName:       db 'Terminal File VIEWer '
-        version:        db '(v. 1.1.0): '
-        signature:      db 'a barebones assembly schtick.', 0Ah
+	version:        db '(v. 1.1.0): '
+	signature:      db 'a barebones assembly schtick.', 0Ah
 			db 'created by anson <thesearethethingswesaw@gmail.com>', 0Ah, 0Ah, 0
-        usage:          db 'Usage:', 0Ah, 09h, 'view (-h / --help)', 0Ah
-			db 09h, 'view <filename>', 0Ah
+	usage:          db 'Usage:', 0Ah, 09h, 'view (-h / --help)', 0Ah
+			db 09h, 'view (-v / --version)', 0Ah
+			db 09h, 'view [-x] <filename>', 0Ah
 			db 09h, 'view -c <count> <filename>', 0Ah, 0Ah
-			db 'Options:', 0Ah, 09h, '-c, --count', 09h, 'the amount of characters to display', 0Ah, 0Ah, 0
+			db 'Options:', 0Ah, 09h, '-c, --count', 09h, 'the amount of characters to display', 0Ah
+			db 09h, '-x, --hex', 09h, 'displays a hex dump of the file', 0Ah, 0Ah, 0
 	footer:		db 'this product refuses a license, see UNLICENSE for related details', 0Ah, 0
 
-        errorPre:       db 'view: ', 0
-        statusPre:      db 'view: ', 0
+	errorPre:       db 'view: ', 0
 
 	; error messages down below
-        badArgsError:	db 'unknown argument', 0Ah, 0
-        noArgsError:	db 'too few arguments, try "--help"', 0Ah, 0
+	badArgsError:	db 'unknown argument', 0Ah, 0
+	noArgsError:	db 'too few arguments, try "--help"', 0Ah, 0
 	noOptError:	db 'no option argument', 0Ah, 0
 	badOptError:	db 'option argument not a number', 0Ah, 0
 	ignoreError:	db 'non-argument string ignored', 0Ah, 0
-        badOpenError:	db 'file could not be open', 0Ah, 0
-        badReadError:	db 'file could not be read', 0Ah, 0
+	badOpenError:	db 'file could not be open', 0Ah, 0
+	badReadError:	db 'file could not be read', 0Ah, 0
 
 	; long argument strings for testing
 	helpString:	db 'help', 0
 	versionString:	db 'version', 0
 	countString:	db 'count', 0
+	hexString:	db 'hex', 0
 
 	nl:		db 0Ah, 0
 	space:		db 20h, 0
-	zero:		db 30h, 0
-
-	tester:		db 'F', 0
 
 	inbufsize	equ 1
 	bufsize		equ 64
@@ -68,7 +67,7 @@ argsLoop:
 	pop	rdi		; grab the next argv[] on the stack
 	test	rdi, rdi	; does it start with a null character?
 	je	openFile	; if so, exit loop
-	cmp	[rdi], byte 45	; does the character begin with a hyphen?
+	cmp	[rdi], byte '-'	; does the character begin with a hyphen?
 	je	argsParse	; go for further processing
 	inc	rbx		; increment count, for each non argument string
 	cmp	rbx, 2
@@ -78,34 +77,27 @@ argsLoop:
 
 argsParse:
 	inc	rdi		; move the pointer up one
-	cmp	[rdi], byte 45	; long option?
+	cmp	[rdi], byte '-'	; long option?
 	je	longArgsParse	; if so, move to different section
 	cmp	[rdi], byte 0	; does the argument just end?
 	je	argsLoop	; if so, continue back to loop
 
 	; the character itself is in rdi
 
-	cmp	[rdi], byte 104	; first, test 'h', both lowercase...
+	cmp	[rdi], byte 'h'	; first, test 'h'
 	je	printUsage
-	cmp	[rdi], byte 72	; ... and uppercase
-	je	printUsage
-	cmp	[rdi], byte 118	; do we want to print version info?
+	cmp	[rdi], byte 'v'	; do we want to print version info?
 	je	printVersion
-	cmp	[rdi], byte 86	; also uppercase
-	je	printVersion
-
-	; the rest of the arguments do not
-	; check for uppercase
-
-	cmp	[rdi], byte 99	; test for 'c'
+	cmp	[rdi], byte 'c'	; test for 'c'
 	je	countParse	; and jump ahead for further processing
-
+	cmp	[rdi], byte 'x'
+	je	sethex
 	call	unknownArgs
 	jmp	argsLoop
 
 longArgsParse:
 	inc	rdi		; move the pointer up one
-	cmp	[rdi], byte 45	; are there even more hyphens???
+	cmp	[rdi], byte '-'	; are there even more hyphens???
 	je	argsLoop	; if so, trash it, go back
 	cmp	[rdi], byte 0	; does the arg consist of just two hyphens?
 	je	argsLoop
@@ -125,6 +117,10 @@ longArgsParse:
 	call	strcmp
 	test	rax, rax
 	je	countParse		; if so, jump to further processing
+	mov	rsi, hexString
+	call	strcmp
+	test	rax, rax
+	je	sethex
 	call	unknownArgs		; if its not these, we don't know what it is
 	jmp	argsLoop		; see if theres more arguments
 
@@ -136,6 +132,14 @@ countParse:
 	test	rax, rax
 	js	badOpt			; was the top bit of rax set? must be negative, invalid
 	mov	[count], rax		; save count for later
+	jmp	argsLoop
+
+sethex:
+	push	rdi
+	mov	rdi, wanthex
+	mov	al, 'T'
+	stosb
+	pop	rdi
 	jmp	argsLoop
 
 printUsage:
@@ -162,7 +166,7 @@ unknownArgs:
 	ret
 
 ignoreNonArgs:
-	mov	rdi, statusPre
+	mov	rdi, errorPre
 	call	puts
 	mov	rdi, ignoreError
 	call	puts
@@ -231,12 +235,14 @@ noCount:
 	cmp	rax, 0		; did we get nothing?
 	jle	closeFile	; better close down then
 	mov	rdx, rax	; save the amount we got
-	cmp	[tester], byte 'T'
+	cmp	[wanthex], byte 'T'
 	je	hexconv_nocount
 
 regularprint:
-	mov	rax, 1
-	mov	rdi, 1
+	xor	rax, rax
+	inc	rax
+	xor	rdi, rdi
+	inc	rdi
 	mov	rsi, readbuf
 	syscall
 	jmp	writecheck
@@ -248,16 +254,28 @@ hexconv_nocount:
 	call	itoa
 	call	strlen
 	mov	rdx, rax	; save return value into count for write
-	mov	rax, 1
-	mov	rdi, 1
+	xor	rax, rax
+	inc	rax
+	xor	rdi, rdi
+	inc	rdi
 	mov	rsi, itoabuf	; the amount to print is already loaded
 	syscall
-	mov	rdi, space	; add a space between digits
-	call	puts
+	xor	rax, rax
+	inc	rax
+	xor	rdx, rdx
+	inc	rdx
+	mov	rsi, space	; add a space between digits
+	syscall
 	cmp	r12, 10		; did we already print 10 numbers?
 	jle	writecheck	; if not, continue as normal
-	mov	rdi, nl		; add a newline for easier reading
-	call	puts
+	xor	rax, rax
+	inc	rax
+	xor	rdi, rdi
+	inc	rdi
+	xor	rdx, rdx
+	inc	rdx
+	mov	rsi, nl		; add a newline for easier reading
+	syscall
 	xor	r12, r12	; reset counter
 
 writecheck:
@@ -306,7 +324,7 @@ puts:
 	pop	rsi
 	ret
 
-; implementation of libc strlen()
+; basic implementation of libc strlen()
 ; rdi = address of string
 ; rax = length of string
 strlen:
@@ -403,11 +421,10 @@ itoa_nextdigit:
 itoa_noadd:
 	stosb			; store to memory-buffer
 	loop 	itoa_nextdigit	; again for other remainders
-	xor	al, al
 	mov	al, '.'
 	stosb
-	xor 	al, al
-	stosb			; store the null terminator at the end of the string
+	xor	al, al
+	stosb
 
 	pop 	rax
 	pop 	rbx
@@ -433,6 +450,7 @@ exitFailure:
 ;=================================================
 
 section .bss
+	wanthex		resb 2
 	inFile		resb bufsize
 	count		resb bufsize
 	itoabuf		resb bufsize
