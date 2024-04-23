@@ -7,6 +7,39 @@
 ; Made by anson, in April 2024
 ;=================================================
 
+;=================================================
+; MACROS BEGIN HERE
+;=================================================
+
+%macro	error 1
+	push	rdi
+	mov	rdi, errorPre
+	call	puts
+	mov	rdi, %1
+	call	puts
+	pop	rdi
+%endmacro
+
+%macro	error_r 1
+	error	%1
+	call	exitFailure
+%endmacro
+
+%macro	fastmov 1
+	xor	%1, %1
+	inc	%1
+%endmacro
+
+%macro	teststr	1
+	mov	rsi, %1
+	call	strcmp
+	test	rax, rax
+%endmacro
+
+;=================================================
+; MACROS END HERE
+;=================================================
+
 section .data
 
 	; since our strlen() keeps looking until
@@ -105,42 +138,34 @@ longArgsParse:
 	; the string begins at rdi, and is already null-terminated
 	; at least, it plays nice with this implementation of puts()
 
-	mov	rsi, helpString 	; does the argument equal 'help'?
-	call	strcmp
-	test	rax, rax
-	je	printUsage		; if so, jump to usage
-	mov	rsi, versionString	; does the argument equal 'version'?
-	call	strcmp
-	test	rax, rax
-	je	printVersion		; if so, jump to version
-	mov	rsi, countString	; does the argument equal 'count'?
-	call	strcmp
-	test	rax, rax
-	je	countParse		; if so, jump to further processing
-	mov	rsi, hexString
-	call	strcmp
-	test	rax, rax
-	je	sethex
-	call	unknownArgs		; if its not these, we don't know what it is
-	jmp	argsLoop		; see if theres more arguments
+	teststr helpString	; does the argument equal 'help'?
+	je	printUsage	; if so, jump to usage
+	teststr	versionString	; does the argument equal 'version'?
+	je	printVersion	; if so, jump to version
+	teststr	countString	; does the argument equal 'count'?
+	je	countParse	; if so, jump to further processing
+	teststr	hexString	; does the argument equal 'hex'?
+	je	sethex		; if so, jump to further processing
+	call	unknownArgs	; if its not these, we don't know what it is
+	jmp	argsLoop	; see if theres more arguments
 
 countParse:
-	pop	rdi			; get the next argument, this should be a number
-	test	rdi, rdi		; is the argument non existant?
+	pop	rdi		; get the next argument, this should be a number
+	test	rdi, rdi	; is the argument non existant?
 	je	noOpt
-	call	atoi			; rdi already holds the option string
+	call	atoi		; rdi already holds the option string
 	test	rax, rax
-	js	badOpt			; was the top bit of rax set? must be negative, invalid
-	mov	[count], rax		; save count for later
+	js	badOpt		; was the top bit of rax set? must be negative, invalid
+	mov	[count], rax	; save count for later
 	jmp	argsLoop
 
 sethex:
-	push	rdi
-	mov	rdi, wanthex
-	mov	al, 'T'
-	stosb
-	pop	rdi
-	jmp	argsLoop
+	push	rdi		; save whatever was in rdi
+	mov	rdi, wanthex	; load buffer
+	mov	al, 't'		; load character
+	stosb			; and add character to buffer
+	pop	rdi		; restore rdi
+	jmp	argsLoop	; continue on
 
 printUsage:
 	mov	rdi, fileName
@@ -159,39 +184,16 @@ printVersion:
 ; this subroutine does not exit the program but rather
 ; returns back to the calling point
 unknownArgs:
-	mov	rdi, errorPre
-	call	puts
-	mov	rdi, badArgsError
-	call	puts
+	error	badArgsError
 	ret
 
 ignoreNonArgs:
-	mov	rdi, errorPre
-	call	puts
-	mov	rdi, ignoreError
-	call	puts
+	error	ignoreError
 	jmp	argsLoop
 
-noArgs:
-	mov	rdi, errorPre
-	call	puts
-	mov	rdi, noArgsError
-	call	puts
-	call	exitFailure
-
-noOpt:
-	mov	rdi, errorPre
-	call	puts
-	mov	rdi, noOptError
-	call	puts
-	call	exitFailure
-
-badOpt:
-	mov	rdi, errorPre
-	call	puts
-	mov	rdi, badOptError
-	call	puts
-	call	exitFailure
+noArgs: error_r noArgsError
+noOpt:	error_r	noOptError
+badOpt:	error_r	badOptError
 
 ;=================================================
 ; ARGUMENT PARSING ENDS HERE
@@ -219,8 +221,8 @@ yesCount:
 	syscall
 	cmp	rax, -1		; was there any sort of error?
 	jle	badRead		; if so, error and exit
-	mov	rax, 1		; okay, now lets print...
-	mov	rdi, 1		; ...to stdout
+	fastmov	rax		; okay, now lets print...
+	fastmov	rdi		; ...to stdout
 	syscall
 	call	closeFile
 
@@ -235,45 +237,36 @@ noCount:
 	cmp	rax, 0		; did we get nothing?
 	jle	closeFile	; better close down then
 	mov	rdx, rax	; save the amount we got
-	cmp	[wanthex], byte 'T'
+	cmp	[wanthex], byte 't'
 	je	hexconv_nocount
 
 regularprint:
-	xor	rax, rax
-	inc	rax
-	xor	rdi, rdi
-	inc	rdi
-	mov	rsi, readbuf
+	fastmov	rax		; we want to print...
+	fastmov	rdi		; ...to stdout
+	mov	rsi, readbuf	; print out the number that we read
 	syscall
-	jmp	writecheck
+	jmp	writecheck	; and skip over the hex part
 
 hexconv_nocount:
 	inc	r12		; increment counter
 	mov	rax, [readbuf]	; set what we read to convert
 	mov	rdi, itoabuf	; set block to recieve return value
-	call	itoa
+	call	itoa_16
 	call	strlen
 	mov	rdx, rax	; save return value into count for write
-	xor	rax, rax
-	inc	rax
-	xor	rdi, rdi
-	inc	rdi
+	fastmov	rax		; we want to write...
+	fastmov	rdi		; ...to stdout
 	mov	rsi, itoabuf	; the amount to print is already loaded
 	syscall
-	xor	rax, rax
-	inc	rax
-	xor	rdx, rdx
-	inc	rdx
+	fastmov	rax		; reset the clobbered registers
+	fastmov	rdx
 	mov	rsi, space	; add a space between digits
 	syscall
 	cmp	r12, 10		; did we already print 10 numbers?
 	jle	writecheck	; if not, continue as normal
-	xor	rax, rax
-	inc	rax
-	xor	rdi, rdi
-	inc	rdi
-	xor	rdx, rdx
-	inc	rdx
+	fastmov	rax		; we want to write...
+	fastmov	rdi		; ...to stdout...
+	fastmov	rdx		; ...but only one char
 	mov	rsi, nl		; add a newline for easier reading
 	syscall
 	xor	r12, r12	; reset counter
@@ -291,19 +284,8 @@ closeFile:
 	syscall
 	call	exitSuccess	; program end!
 
-badOpen:
-	mov	rdi, errorPre
-	call	puts
-	mov	rdi, badOpenError
-	call	puts
-	call	exitFailure
-
-badRead:
-	mov	rdi, errorPre
-	call	puts
-	mov	rdi, badReadError
-	call	puts
-	call	exitFailure
+badOpen:error_r	badOpenError
+badRead:error_r	badReadError
 
 ;=================================================
 ; HELPER FUNCTIONS BEGIN HERE
@@ -394,7 +376,7 @@ atoi_end:
 ; implementation of libc itoa(), but specifically for hexadecimal
 ; rax = binary integer
 ; rdi = address of string
-itoa:
+itoa_16:
 	push 	rdx
 	push 	rcx
 	push 	rbx
