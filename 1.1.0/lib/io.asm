@@ -1,3 +1,5 @@
+%include "lib/defs.asm"
+
 ; basic implementation of libc puts()
 ; NOTE, requires a null-terminated string
 ; rdi = address of null-terminated string
@@ -8,7 +10,7 @@ puts:
 	mov	rdx, rax	; move the count given into its place
 	mov	rsi, rdi	; ready the address for the write() call
 	mov	rax, 1		; we want to write...
-	mov	rdi, 1		; ... to stdout
+	mov	rdi, stdout	; ... to stdout
 	syscall
 	pop	rsi
 	ret
@@ -124,11 +126,11 @@ itoa_noadd:
 ; exit with return code 0
 exitSuccess:
         mov     rax, 60
-        mov     rdi, 0
+        mov     rdi, exit_succcess
         syscall
 
 ; exit with return code -1
 exitFailure:
         mov     rax, 60
-        mov     rdi, -1
+        mov     rdi, exit_failure
         syscall
