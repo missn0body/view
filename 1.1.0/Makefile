@@ -37,7 +37,7 @@ dist: clean
 dist: all
 dist: $(DDIR)/$(BIN).7
 	gzip -vk $<
-	tar -czvf $(BIN)-$(VERSION).tar.gz $(BDIR)/$(BIN) $(DDIR)/*../README.md ../UNLICENSE --transform 's,^,$(BIN)-$(VERSION)/,'
+	tar -czvf $(BIN)-$(VERSION).tar.gz $(BDIR)/$(BIN) $(DDIR)/* ../README.md ../UNLICENSE --transform 's,^,$(BIN)-$(VERSION)/,'
 	md5sum $(BIN)-$(VERSION).tar.gz
 
 self: clean
