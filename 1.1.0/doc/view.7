@@ -1,0 +1,52 @@
+.TH view 7 "April 2024" "Version 1.1.0"
+.SH NAME
+view \- Terminal-based file VIEWer
+.SH SYNOPSIS
+.B view
+.I [-x]
+.I <filename>
+.PP
+.B view
+.I -c
+.I <count>
+.I <filename>
+.SH DESCRIPTION
+.B view,
+similar to
+.B cat
+prints the entire contents, or a given selection of a file to standard output.
+Upon usage of the
+.B -c
+flag, and an appropriate decimal number,
+.B view
+will display that given number of characters from the input file.
+.PP
+.B view
+also has the ability to produce a formatted hex dump of a given file, formatted
+in such that two digit hexadecimal values such as ASCII characters are printed
+normally, but one digit values such as control characters like the horizontal tab
+.I (0x09)
+or the line feed
+.I (0x0A)
+are displayed not prefixed by a zero, but rather followed by a period, in that
+"09" becomes "9." when displayed by
+.B view.
+The
+.B -c
+flag will be ignored by the program in hex mode.
+.PP
+As of version 1.1.0,
+.B view
+can not accept input from stdin.
+.PP
+.B view
+is invokable through the terminal.
+.SH OPTIONS
+.IP "-x, --hex"
+Prints a hex dump of the given file instead of an ASCII representation
+.IP "-c, --count"
+The number of characters from the given file to print out.
+.SH BUGS
+No known bugs
+.SH AUTHORS
+Written by anson <thesearethethingswesaw@gmail.com>
